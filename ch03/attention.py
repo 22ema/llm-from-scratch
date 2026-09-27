@@ -46,31 +46,35 @@ class SelfAttention_v2(nn.Module):
         context_vec = attn_weights @ values
         return context_vec
 
+
+class CausalAttention(nn.Module):
+    def __init__(self, d_in, d_out, dropout, context_length, qkv_bias):
+        super().__init__()
+        self.d_out = d_out
+        self.W_q = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_k = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.W_v = nn.Linear(d_in, d_out, bias=qkv_bias)
+        self.dropout = nn.Dropout(dropout)
+        self.register_buffer(
+            'mask',
+            torch.triu(torch.ones(context_length, context_length),
+            diagonal=1)
+        )
+
+    def forward(self, x):
+        b, num_tokens, d_in = x.shape
+        query = self.W_q(x)
+        key = self.W_k(x)
+        value = self.W_v(x)
+
+        attn_score = query @ key.transpose(1, 2)
+        attn_score.masked_fill_(self.mask.bool()[:num_tokens, :num_tokens], -torch.inf)
+        attn_weight = torch.softmax(attn_score/key.shape[-1] ** 0.5, dim=-1)
+        attn_weight = self.dropout(attn_weight)
+        context_vec = attn_weight @ value
+        return context_vec
+
+
 if __name__ == "__main__":
-    # x_2 = inputs[1]
-    d_in = inputs.shape[1]
-    d_out = 2
-    #
-    # w_query = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
-    # w_key = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
-    # w_value = torch.nn.Parameter(torch.rand(d_in, d_out), requires_grad=False)
-    #
-    # queries = inputs @ w_query
-    # keys = inputs @ w_key
-    # values = inputs @ w_value
-    #
-    # attn_score = queries @ keys.T
-    # print(attn_score)
-    #
-    # d_k = keys.shape[-1]
-    # attn_weight = torch.softmax(attn_score / d_k**0.5, dim=-1)
-    # print(attn_weight)
-    #
-    # context_vec = attn_weight @ values
-    # print(context_vec)
-
-    sa_v1 = SelfAttention_v1(d_in, d_out)
-    print(sa_v1(inputs))
-
-    sa_v2 = SelfAttention_v2(d_in, d_out)
-    print(sa_v2(inputs))
+    batch = torch.stack((inputs, inputs), dim=0)
+    print(batch.shape)
